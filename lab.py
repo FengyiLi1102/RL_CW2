@@ -2,13 +2,13 @@ num_episodes = 1000
 NUM_RUNS = 10
 EPSILON = 1
 eps_min = 0.05
-eps_decay = eps_min ** (1 / (num_episodes - 200))
-update_frequency = 128
-buffer_size = 1000
+eps_decay = eps_min ** (1 / (num_episodes - 400))
+update_frequency = 64
+buffer_size = 256
 dqn_layer_params = [4, 2, 64, 5]
 lr = 1e-4
 batch_size = 128
-training_step = 1
+training_step = 3
 
 import random
 from collections import deque
