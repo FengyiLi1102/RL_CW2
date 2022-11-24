@@ -1,9 +1,12 @@
 import random
 from collections import deque
+from typing import Tuple, Any
 
 import torch
 import torch.nn.functional as F
 from torch import nn
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # Configuring Pytorch
 
 
 class ReplayBuffer:
@@ -41,16 +44,29 @@ class ReplayBuffer:
 
 
 class DQN(nn.Module):
-    def __init__(self, layer_sizes: list[int]):
+    def __init__(self, layer_params: list[int]):
         """
         DQN initialisation
 
         Args:
-            layer_sizes: list with size of each layer as elements
+            layer_params: list [input_size, output_size, hidden_size, num_hidden]
         """
-        super(DQN, self).__init__()
-        self.layers = nn.ModuleList(
-            [nn.Linear(layer_sizes[i], layer_sizes[i + 1]) for i in range(len(layer_sizes) - 1)])
+        super().__init__()
+        # Check the validity of the parameters
+        assert all(i > 0 for i in layer_params)
+        input_size, output_size, hidden_size, num_hidden = layer_params
+
+        # Input layer: Linear
+        self.input_layer = nn.Linear(input_size, hidden_size)
+
+        # Hidden layers: Linear
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for _ in range(num_hidden)])
+
+        # Output layers: Linear
+        self.output_layers = nn.Linear(hidden_size, output_size)
+
+        # self.layers = nn.ModuleList(
+        #     [nn.Linear(layer_sizes[i], layer_sizes[i + 1]) for i in range(len(layer_sizes) - 1)])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the DQN
@@ -61,8 +77,15 @@ class DQN(nn.Module):
         Returns:
             outputted value by the DQN
         """
-        for layer in self.layers:
-            x = F.relu(layer(x))
+        x.to(device)
+        x = self.input_layer(x)     # Passing through the input layer
+        x = nn.ReLU(x)              # Applying Relu activation
+
+        for layer in self.hidden_layers:
+            x = layer(x)            # Passing through each hidden layer
+            x = nn.ReLU(x)          # Applying Relu activation
+
+        x = self.output_layer(x)
         return x
 
 
@@ -79,7 +102,7 @@ def greedy_action(dqn: DQN, state: torch.Tensor) -> int:
     return int(torch.argmax(dqn(state)))
 
 
-def epsilon_greedy(epsilon: float, dqn: DQN, state: torch.Tensor) -> int:
+def epsilon_greedy(epsilon: float, dqn: DQN, state: torch.Tensor):
     """Sample an epsilon-greedy action according to a given DQN
     
     Args:
@@ -95,8 +118,10 @@ def epsilon_greedy(epsilon: float, dqn: DQN, state: torch.Tensor) -> int:
     greedy_act = int(torch.argmax(q_values))
     p = float(torch.rand(1))
     if p > epsilon:
+        print("size", num_actions)
         return greedy_act
     else:
+        print("size", num_actions)
         return random.randint(0, num_actions - 1)
 
 
@@ -112,11 +137,9 @@ def update_target(target_dqn: DQN, policy_dqn: DQN):
     target_dqn.load_state_dict(policy_dqn.state_dict())
 
 
-def loss(policy_dqn: DQN, target_dqn: DQN,
-         states: torch.Tensor, actions: torch.Tensor,
+def loss(policy_dqn: DQN, target_dqn: DQN, states: torch.Tensor, actions: torch.Tensor,
          rewards: torch.Tensor, next_states: torch.Tensor, dones: torch.Tensor) -> torch.Tensor:
     """Calculate Bellman error loss
-    
     Args:
         policy_dqn: policy DQN
         target_dqn: target DQN
@@ -125,7 +148,7 @@ def loss(policy_dqn: DQN, target_dqn: DQN,
         rewards: batched rewards tensor
         next_states: batched next states tensor
         dones: batched Boolean tensor, True when episode terminates
-    
+
     Returns:
         Float scalar tensor with loss value
     """
